@@ -28,9 +28,16 @@ class OrbitalMap:
             if not pName in self.bodies:
                 self.bodies[pName] = Body(pName, None)
             parent = self.bodies[pName]
-            child = Body(cName, parent)
-            self.bodies[cName] = child
-            print("{}){} -> {}".format(pName, cName, child.orbitalChain()))
+            if cName in self.bodies:
+                # fix up the chain for out-of-order creation
+                child = self.bodies[cName]
+                if child.parent and child.parent != parent:
+                    print("child {} already exists with parent {} (would attach to {})".format(cName, child.parent.name, pName))
+                else:
+                    child.parent = parent
+            else:
+                self.bodies[cName] = Body(cName, parent)
+            # print("{}){} -> {}".format(pName, cName, child.orbitalChain()))
 
     def totalOrbitalDepth(self):
         return sum((b.orbitalDepth() for b in self.bodies.values()))
