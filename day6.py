@@ -45,13 +45,29 @@ class OrbitalMap:
     def com(self):
         return [b.name for b in self.bodies.values() if b.orbitalDepth() == 0]
 
+    def orbitalTransfers(self, fromName, toName):
+        source = self.bodies[fromName].parent
+        sourcepath = list(reversed(source.orbitalChain()))
+
+        ## build the outbound path lookup
+        dest = self.bodies[toName].parent
+        destpath = list(reversed(dest.orbitalChain()))
+        deststeps = dict(((name, val) for val,name in enumerate(destpath)))
+
+        for step in enumerate(sourcepath):
+            if step[1] in deststeps:
+                outbound = deststeps[step[1]]
+                print("{} steps inwards {}->{}->{} + {} steps outwards {}->{}->{}".format(step[0], fromName, sourcepath[:step[0]], step[1], outbound, step[1], dest.orbitalChain()[-outbound:], toName))
+                return step[0] + outbound
+
+
 import sys
 import pdb
-## pdb.set_trace()
 
 om = OrbitalMap()
 with open(sys.argv[1], 'r') as mapfile:
     om.load(mapfile)
 print("un-parented: COM={}".format(om.com()))
 print("total orbital depth: {}".format(om.totalOrbitalDepth()))
-
+## pdb.set_trace()
+print("transfers YOU->SAN: {}".format(om.orbitalTransfers('YOU', 'SAN')))
