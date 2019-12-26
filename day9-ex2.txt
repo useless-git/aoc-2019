@@ -1,0 +1,2 @@
+## should output a 16-digit number
+1102,34915192,34915192,7,4,7,99,0
