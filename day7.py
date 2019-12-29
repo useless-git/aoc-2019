@@ -93,7 +93,7 @@ def maxAmpSequence(phases, program):
 import sys
 if __name__=='__main__':
     if len(sys.argv) > 2 and sys.argv[2] == '-v':
-        TRACE=1
+        intcode7.TRACE=1
 
     if len(sys.argv) < 2:
         print("Syntax: {} <program file> [-v]".format(sys.argv[0]))
