@@ -91,12 +91,16 @@ class Turtle:
     """this emergency hull-painting robot is very LOGO-like"""
     Directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]
     DirectionNames = ["up", "right", "down", "left"]
+    DirectionSymbols = ["^", ">", "v", "<"]
 
-    def __init__(self):
+    def __init__(self, initial = 0):
         self.direction = 0
         self.pos = (0,0)
         self.field = collections.defaultdict(int)
         self.written = collections.defaultdict(int) # stop outputs being polluted by lazily-populated inputs
+
+        # set the initial panel colour for part2
+        self.field[self.pos] = initial
 
         def localGetInput(prompt):
             """provide current panel colour as input"""
@@ -140,6 +144,27 @@ class Turtle:
     def totalPainted(self):
         return len(self.written)
 
+    def toString(self, showTurtle = False):
+        minx = min(k[0] for k in self.field.keys())
+        maxx = max(k[0] for k in self.field.keys())
+        miny = min(k[1] for k in self.field.keys())
+        maxy = max(k[1] for k in self.field.keys())
+
+        def sym(pos):
+            nonlocal self
+            nonlocal showTurtle
+            if showTurtle and pos == self.pos:
+                return Turtle.DirectionSymbols[self.direction]
+            return ['.', '#'][self.field[pos]]
+
+        rows=[''.join([sym((x,y)) for x in range(minx, maxx+1)]) for y in range(miny, maxy+1)]
+        return '\n'.join(rows)
+
+#       rows = []
+#       for y in range(miny, maxy+1):
+#           row = [sym((x,y)) for x in range(minx, maxx+1)]
+#           rows.append(row)
+
 import sys
 if __name__=='__main__':
     if len(sys.argv) > 2 and sys.argv[2] == '-v':
@@ -162,8 +187,17 @@ if __name__=='__main__':
         line = progfile.readline().strip()
 
     inprog = [int(x) for x in line.split(',')]
-    turtle = Turtle()
+
+    initial = 0
+    if len(sys.argv) > 2 and sys.argv[2] == '--part2':
+        initial = 1
+
+    turtle = Turtle(initial)
     turtle.execute(inprog)
     print("painted {} panels (at least once)".format(turtle.totalPainted()))
+
+    if initial:
+        print(" --- final state --- ")
+        print(turtle.toString(True))
 
 
