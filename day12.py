@@ -20,6 +20,7 @@ velocity. Time progresses by one step once all of the positions are updated.
 import array
 from functools import reduce
 import itertools
+import math
 import pdb
 import re
 
@@ -44,8 +45,8 @@ class Body:
         return hash(self.pos + self.vel)
 
     def exactkey(self):
-        "just a tuple with everything in"
-        return array.array('h', self.pos + self.vel)
+        "now a 3-tuple of ((pos,vel)) pairs"
+        return tuple(zip(self.pos, self.vel))
 
     @staticmethod
     def applyPairwiseAcceleration(a, b):
@@ -118,7 +119,9 @@ class System:
 
     def exactkey(self):
         "it's a great big tuple!"
-        return tuple(itertools.chain(*(b.exactkey() for b in self.bodies)))
+        def pl(a,b):
+            return tuple(aa+bb for aa,bb in zip(a,b))
+        return tuple(reduce(pl, (b.exactkey() for b in self.bodies)))
 
 class Trie:
     "need a better size-optimized way to pack our historical states"
@@ -215,22 +218,43 @@ class Trie:
 
 class History:
     def __init__(self):
-        self.states = Trie()
+        self.states = [Trie(), Trie(), Trie()]
+        self.period = [None, None, None]
 
     def record(self, system):
-        # add a rough pre-check / bloom filter if necessary
-        # rkey = system.roughkey()
-        xkey = system.exactkey()
-        return self.states.insert(xkey, system.step)
+        "return True when all dimension periods known"
+        def do_record(key, states, val, period, index):
+            if period[index]:
+                return True
+            if not states[index].insert(key, val):
+                print("\n{} period found at {} steps".format('xyz'[index], val))
+                period[index] = val
+                states[index] = None
+                return True
+            return False
+
+        keys = system.exactkey()
+        done = tuple(do_record(k, self.states, system.step, self.period, i) for i,k in enumerate(keys))
+        return all(done)
 
     def describeLoop(self, system):
-        xkey = system.exactkey()
-        previous = self.states.find(xkey)
-        print("State first reached in step {}, and repeated in step {}".format(previous, system.step))
-        formatBodyPosVel(system)
+        for d,p in zip('xyz', self.period):
+            print("State first reached {}-periodicity in step {}".format(d,p))
+        def lcm(a,b):
+            "least common multiple"
+            return (a*b) // math.gcd(a,b)
+        overall_period = reduce(lcm, self.period)
+        print("Overall period (all dimensions repeat pos,vel) {}".format(overall_period))
 
     def describe(self):
-        return self.states.describe()
+        lines=[]
+        for d,s,p in zip('xyz', self.states, self.period):
+            if p:
+                l = '{}-dimension period = {}'.format(d,p)
+            else:
+                l = '{}-dimension working {}'.format(d, s.describe())
+            lines.append(l)
+        return '\n++ '.join(lines)
 
 positionREstr = r'<x=(?P<x>-?\d+), y=(?P<y>-?\d+), z=(?P<z>-?\d+)>'
 positionRE = re.compile(positionREstr)
@@ -430,16 +454,16 @@ if __name__=='__main__':
         spin = Spinner(1000, sys.stdout)
         try:
             # pdb.set_trace()
-            while h.record(s):
+            while not h.record(s):
                 s.advance()
                 spin.advance(s.step)
             print("\n== done ==")
             h.describeLoop(s)
-        except:
+        except KeyboardInterrupt:
             # pdb.set_trace()
-            # TODO discard Trie and minimize unique tracking size
             print("\ninterrupted/failed with state {} after {} steps".format(h.describe(), s.step))
     else:
+        # part1
         for step in range(1000):
             s.advance()
         print(formatBodyEnergies(s))
