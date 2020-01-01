@@ -37,6 +37,14 @@ class Body:
         "potential energy is the sum of the absolute values of its x, y, and z position coordinates"
         return sum(abs(p) for p in self.pos)
 
+    def roughkey(self):
+        "quick comparison"
+        return hash(self.pos + self.vel)
+
+    def exactkey(self):
+        "just a tuple with everything in"
+        return self.pos + self.vel
+
     @staticmethod
     def applyPairwiseAcceleration(a, b):
         """To apply gravity, consider every pair of moons.
@@ -101,6 +109,88 @@ class System:
         # 2. move step
         for b in self.bodies:
             b.applyVelocity()
+
+    def roughkey(self):
+        "quick comparison of system state"
+        return sum(b.roughkey() for b in self.bodies)
+
+    def exactkey(self):
+        "it's a great big tuple!"
+        return tuple(itertools.chain(*(b.exactkey() for b in self.bodies)))
+
+class Trie:
+    "need a better size-optimized way to pack our historical states"
+
+    class Node:
+        def __init__(self):
+            self.children = {}
+            self.val = None
+
+        def size(self):
+            return len(self.children) + sum(c.size() for c in self.children.values())
+
+        def find(self, keys):
+            if not keys or len(keys) == 0:
+                return self
+
+            nkey = keys[0]
+            if nkey in self.children:
+                return self.children[nkey].find(keys[1:])
+
+            return None
+
+        def findOrInsert(self, keys):
+            if not keys or len(keys) == 0:
+                return self
+
+            nkey = keys[0]
+            if nkey in self.children:
+                child = self.children[nkey]
+            else:
+                child = Trie.Node()
+                self.children[nkey] = child
+            return child.findOrInsert(keys[1:])
+
+    def __init__(self):
+        self.root = Trie.Node()
+
+    def contains(self, keyseq):
+        return self.root.find(keyseq) != None
+
+    def find(self, keyseq):
+        node = self.root.find(keyseq)
+        return node.val if node is not None else None
+
+    def insert(self, keyseq, val):
+        "return True if new node inserted, False if it was already there"
+        leaf = self.root.findOrInsert(keyseq)
+        if leaf.val is None:
+            leaf.val = val
+            return True
+        else:
+            if leaf.val != val:
+                print("Trie:{} -> {}, collides with {}".format(str(keyseq), leaf.val, val))
+            return False
+
+    def size(self):
+        return self.root.size()
+
+
+class History:
+    def __init__(self):
+        self.states = Trie()
+
+    def record(self, system):
+        # add a rough pre-check / bloom filter if necessary
+        # rkey = system.roughkey()
+        xkey = system.exactkey()
+        return self.states.insert(xkey, system.step)
+
+    def describeLoop(self, system):
+        xkey = system.exactkey()
+        previous = self.states.find(xkey)
+        print("State first reached in step {}, and repeated in step {}".format(previous, system.step))
+        formatBodyPosVel(system)
 
 positionREstr = r'<x=(?P<x>-?\d+), y=(?P<y>-?\d+), z=(?P<z>-?\d+)>'
 positionRE = re.compile(positionREstr)
@@ -239,6 +329,51 @@ def testExample1():
     print(formatBodyPosVel(s)) # 10
     print(formatBodyEnergies(s))
 
+import time
+
+class Spinner:
+    SYMS = r'|/-\*'
+    def __init__(self, interval, out, fmt=" {sym:s} {tc[0]:02d}:{tc[1]:02d}:{tc[2]:02d}.{tc[3]:03d} === ({ips:.1f}/sec) === {val}       \r"):
+        self.interval = interval
+        self.current = 0
+        self.beginTS = Spinner.now()
+        self.out = out
+        self.fmt = fmt
+
+    def advance(self, value):
+        if value >= self.current + self.interval:
+            # update state
+            self.current = value
+
+            # graphic spinner
+            sym = Spinner.SYMS[(value // self.interval) % len(Spinner.SYMS)]
+
+            # elapsed time vals
+            now = Spinner.now()
+            elapsed = now - self.beginTS
+            ips = value / elapsed
+            tc = Spinner.timeComponents(elapsed)
+
+            self.out.write(self.fmt.format(sym=sym, val=value, sec=elapsed, tc=tc, ips=ips))
+
+    @staticmethod
+    def now():
+        return time.process_time()
+
+    @staticmethod
+    def timeComponents(ftime):
+        # pdb.set_trace()
+        raw_ns = int(1000000000 * ftime)
+        ns = raw_ns % 1000
+        us = (raw_ns // 1000) % 1000
+        ms = (raw_ns // 1000000) % 1000
+        raw_sec = int(ftime)
+        ss = raw_sec % 60
+        mm = (raw_sec // 60) % 60
+        hh = (raw_sec // 60) // 60
+        return (hh, mm, ss, ms, us, ns)
+
+
 if __name__=='__main__':
     import sys
 
@@ -249,6 +384,22 @@ if __name__=='__main__':
 
 
     s = loadInitialSystem('day12-input.txt')
-    for step in range(1000):
-        s.advance()
-    print(formatBodyEnergies(s))
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--part2':
+        h = History()
+        spin = Spinner(1000, sys.stdout)
+        try:
+            # pdb.set_trace()
+            while h.record(s):
+                s.advance()
+                spin.advance(s.step)
+            print("\n== done ==")
+            h.describeLoop(s)
+        except:
+            # pdb.set_trace()
+            # TODO discard Trie and minimize unique tracking size
+            print("\ninterrupted/failed with {} Trie entries after {} steps".format(h.states.size(), s.step))
+    else:
+        for step in range(1000):
+            s.advance()
+        print(formatBodyEnergies(s))
