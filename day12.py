@@ -17,6 +17,8 @@ velocity. Time progresses by one step once all of the positions are updated.
 
 """
 
+import array
+from functools import reduce
 import itertools
 import pdb
 import re
@@ -43,7 +45,7 @@ class Body:
 
     def exactkey(self):
         "just a tuple with everything in"
-        return self.pos + self.vel
+        return array.array('h', self.pos + self.vel)
 
     @staticmethod
     def applyPairwiseAcceleration(a, b):
@@ -151,6 +153,34 @@ class Trie:
                 self.children[nkey] = child
             return child.findOrInsert(keys[1:])
 
+        def stats(self):
+            "recursive stats: count, minkey, maxkey, minchld, maxchld, depth"
+            mycount = len(self.children)
+            if mycount == 0:
+                return (1, 0, 0, 0, 0, 1)
+
+            def siblings(a, b):
+                count = a[0]+b[0]
+                minkey = min(a[1],b[1])
+                maxkey = max(a[2],b[2])
+                minchld = min(a[3],b[3])
+                maxchld = max(a[4],b[4]) 
+                depth = max(a[5],b[5])
+                return (count, minkey, maxkey, minchld, maxchld, depth)
+
+            def parentchild(p, c):
+                count = p[0]+c[0]
+                minkey = min(p[1],c[1])
+                maxkey = max(p[2],c[2])
+                minchld = min(p[3],c[3])
+                maxchld = max(p[4],c[4]) 
+                depth = c[5]+1
+                return (count, minkey, maxkey, minchld, maxchld, depth)
+
+            me = (0, min(self.children), max(self.children), mycount, mycount, 0)
+            them = reduce(siblings, (c.stats() for c in self.children.values()))
+            return reduce(parentchild, (me, them))
+
     def __init__(self):
         self.root = Trie.Node()
 
@@ -175,6 +205,13 @@ class Trie:
     def size(self):
         return self.root.size()
 
+    def describe(self):
+        if not self.root:
+            values = [0, None, None, None, None, None, 0]
+        else:
+            values = self.root.stats()
+        return "Trie=|| {} nodes, key range [{},{}], node min/max children {}/{}, max depth {} ||".format(*values)
+
 
 class History:
     def __init__(self):
@@ -191,6 +228,9 @@ class History:
         previous = self.states.find(xkey)
         print("State first reached in step {}, and repeated in step {}".format(previous, system.step))
         formatBodyPosVel(system)
+
+    def describe(self):
+        return self.states.describe()
 
 positionREstr = r'<x=(?P<x>-?\d+), y=(?P<y>-?\d+), z=(?P<z>-?\d+)>'
 positionRE = re.compile(positionREstr)
@@ -398,7 +438,7 @@ if __name__=='__main__':
         except:
             # pdb.set_trace()
             # TODO discard Trie and minimize unique tracking size
-            print("\ninterrupted/failed with {} Trie entries after {} steps".format(h.states.size(), s.step))
+            print("\ninterrupted/failed with state {} after {} steps".format(h.describe(), s.step))
     else:
         for step in range(1000):
             s.advance()
